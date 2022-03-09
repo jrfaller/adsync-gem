@@ -163,7 +163,7 @@ class AdSyncCli < Thor
 
     def read_id
       out, err, info = Open3.capture3('adb', '-d', 'get-serialno')
-      if !info.success?
+      unless info.success?
         return nil if 'error: no devices found'.eql?(err.strip)
 
         raise "Error executing adb: #{err}" unless info.success?

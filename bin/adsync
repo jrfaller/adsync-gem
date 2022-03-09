@@ -1,0 +1,184 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# This file is part of adsync.
+#
+# adsync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# adsync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with adsync.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Copyright 2018 Jean-Rémy Falleri <jr.falleri@gmail.com>
+
+require 'thor'
+require 'progress_bar'
+require 'yaml'
+require 'open3'
+require 'rainbow'
+
+require_relative '../lib/version'
+
+EXCLUDED_FILES = ['.', '..', 'thumbnails'].freeze
+
+# The AdSync CLI class.
+# It requires a configuration file in +$HOME/.adsync+. The file should contains
+# a YAML configuration of the following format:
+#
+#   PHONE_ID:
+#     RULE_ID:
+#     - PHONE_FOLDER
+#     - COMPUTER_FOLDER
+#
+# such as :
+#
+#   XZ1GAS3770221012:
+#     phone_pictures:
+#     - storage/self/primary/DCIM/Camera/
+#     - Pictures/photos/Camera/
+#     sd_pictures:
+#     - storage/43EE-1500/DCIM/Camera/
+#     - Pictures/photos/Camera/
+class AdSyncCli < Thor
+  desc 'sync', 'Synchronize files on the connected device'
+  method_option :confirm, type: :boolean, aliases: '-c', desc: 'Effective copy is only done when the confim flag is present', default: false
+  method_option :verbose, type: :boolean, aliases: '-v', desc: 'Enable verbose mode', default: false
+  def sync
+    sources = load_current_config
+    sources.each_value do |folders|
+      copy(folders[0], make_absolute(folders[1]), options[:verbose], options[:yes])
+    end
+  end
+
+  desc 'status', 'Display adsync status'
+  def status
+    config = load_config
+    id = read_id
+    config.each do |device, device_config|
+      if device.eql?(id)
+        puts Rainbow(device).green.underline.bright
+      else
+        puts Rainbow(device).red.bright
+      end
+      device_config.each do |name, folders|
+        if device.eql?(id)
+          unique_distant_files = copy_status(folders[0], make_absolute(folders[1]))
+          if unique_distant_files.positive?
+            puts "  #{Rainbow(name).orange.underline.bright} (#{unique_distant_files})"
+          else
+            puts "  #{Rainbow(name).bright}"
+          end
+        else
+          puts "  #{Rainbow(name).bright}"
+        end
+        puts "    source: #{folders[0]}"
+        puts "    target: #{folders[1]}"
+      end
+    end
+  end
+
+  desc 'doctor', 'Check installation for errors'
+  def doctor
+    puts 'Loading configuration:'
+    config = load_config
+    puts 'OK'
+    puts ''
+    puts 'Checking configuration folders:'
+    config.each do |_device, backups|
+      backups.each do |_name, folders|
+        local_folder = make_absolute(folders[1])
+        puts "Error with folder #{local_folder}" unless File.exist?(local_folder) && Dir.exist?(local_folder)
+      end
+    end
+    puts 'OK'
+    puts ''
+    puts 'Executing adb:'
+    out, err, info = Open3.capture3('adb', '--version')
+    if info.success?
+      puts "OK: #{out}"
+    else
+      puts "Error: #{err}"
+    end
+  rescue StandardError => e
+    puts "Error: #{e}"
+  end
+
+  desc 'version', 'Display adsync version'
+  def version
+    puts AdSync::VERSION
+  end
+
+  no_commands do
+    def copy(distant_folder, local_folder, verbose, confirm)
+      check_copy_folders(distant_folder, local_folder)
+      unique_distant_files = compute_unique_distant_files(distant_folder, local_folder)
+      puts "copying #{unique_distant_files.size} files from #{distant_folder} to #{local_folder}"
+      unique_distant_files.each { |f| puts "\t#{f}" } if verbose
+      return unless confirm
+
+      bar = ProgressBar.new(unique_distant_files.size)
+      unique_distant_files.each do |file|
+        _out, err, info = Open3.capture3('adb', '-d', 'pull', "#{distant_folder}#{file}", local_folder)
+        puts "Error executing adb: #{err}" unless info.success?
+        bar.increment!
+      end
+    end
+
+    def copy_status(distant_folder, local_folder)
+      check_copy_folders(distant_folder, local_folder)
+      unique_distant_files = compute_unique_distant_files(distant_folder, local_folder)
+      unique_distant_files.size
+    end
+
+    def compute_unique_distant_files(distant_folder, local_folder)
+      distant_files = `adb -d shell ls "#{distant_folder}"`.split - EXCLUDED_FILES
+      local_files = Dir.entries(local_folder)
+      (distant_files - local_files)
+    end
+
+    def check_copy_folders(distant_folder, local_folder)
+      raise "Local folder #{local_folder} not found" unless File.exist?(local_folder)
+      raise "Local folder #{local_folder} is not a directory" unless Dir.exist?(local_folder)
+
+      _out, err, info = Open3.capture3('adb', '-d', 'shell', 'ls', distant_folder)
+      raise "Error executing adb: #{err}" unless info.success?
+    end
+
+    def make_absolute(local_folder)
+      "#{ENV['HOME']}/#{local_folder}"
+    end
+
+    def read_id
+      out, err, info = Open3.capture3('adb', '-d', 'get-serialno')
+      unless info.success?
+        return nil if 'error: no devices found'.eql?(err.strip)
+
+        raise "Error executing adb: #{err}" unless info.success?
+      end
+      out.strip
+    end
+
+    def load_current_config
+      config = load_config
+      id = read_id
+      raise "No configuration found for device #{id} in #{ENV['HOME']}/.adsync" unless config.key?(id)
+
+      config[id]
+    end
+
+    def load_config
+      raise "No configuration file found at #{ENV['HOME']}/.adsync" unless File.exist?("#{ENV['HOME']}/.adsync")
+
+      YAML.load_file("#{ENV['HOME']}/.adsync")
+    end
+  end
+end
+
+AdSyncCli.start(ARGV)

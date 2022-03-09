@@ -9,25 +9,24 @@ To use AdSync, you need to have unlocked developer options, enabled USB debuggin
 AdSync needs a config file located in `$HOME/.adsync` and also the Android SDK tools installed and available in the path (most importantly `adb`). The YAML config file look like this:
 
 ```
-PHONEID1:
-  folder_backup_name1:
-    - storage/self/primary/DCIM/Camera/
-    - Pictures/photos/Camera/
-  folder_backup_name2:
-    - storage/43EE-1500/DCIM/Camera/
-    - Pictures/photos/Camera/
-PHONEID2:
-  phone_pictures:
-    - storage/self/primary/DCIM/Camera/
-    - Pictures/photos/Camera/
+DEVICE_ID_1:
+  BACKUP_NAME_1:
+    - PATH/TO/DEVICE/FOLDER
+    - PATH/TO/BACKUP/FOLDER
+  BACKUP_NAME_2:
+    - PATH/TO/DEVICE/FOLDER
+    - PATH/TO/BACKUP/FOLDER
+DEVICE_ID_2:
+  BACKUP_NAME_3:
+    - PATH/TO/DEVICE/FOLDER
+    - PATH/TO/BACKUP/FOLDER
 ```
 
-A backup configuration is given for each device. It is a list of named backup items, where the first folder is the phone folder and the second folder is the computer folder.
+A backup configuration is given for each device. It consists of a dictionnary having device id for keys. For each key, the corresponding value is a dictionnary of named backups where the key is a unique name and the value is a pair of source folder on the device and backup folder on the computer.
 
 ## Usage
 
-* `adsync config`: displays the current configuration (.located in `$HOME/.adsync`)
-* `adsync id`: displays the id of the currently connected device
+* `adsync status`: displays the current status (configuration, connected device, folder requiring synchronization)
 * `adsync version`: displays adsync's version
-* `adsync sync`: starts synchronization for the currently connected device (use the `-y` flag to actually synchronize and `-v` to have the details of the file to be synchronized)
+* `adsync sync`: starts synchronization for the currently connected device (use the `-- confirm` flag to actually synchronize and `--verbose` to have the details of the file to be synchronized)
 * `adsync doctor`: check your adsync installation 

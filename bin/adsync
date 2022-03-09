@@ -61,6 +61,12 @@ class AdSyncCli < Thor
   def status
     config = load_config
     id = read_id
+    if id.nil?
+      puts Rainbow('No connected device').red.bright
+    else
+      puts Rainbow("Connected device: #{id}").bright
+    end
+    puts ''
     config.each do |device, device_config|
       if device.eql?(id)
         puts Rainbow(device).green.underline.bright
@@ -157,7 +163,7 @@ class AdSyncCli < Thor
 
     def read_id
       out, err, info = Open3.capture3('adb', '-d', 'get-serialno')
-      unless info.success?
+      if !info.success?
         return nil if 'error: no devices found'.eql?(err.strip)
 
         raise "Error executing adb: #{err}" unless info.success?

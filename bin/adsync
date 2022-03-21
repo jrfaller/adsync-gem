@@ -53,7 +53,7 @@ class AdSyncCli < Thor
   def sync
     sources = load_current_config
     sources.each_value do |folders|
-      copy(folders[0], make_absolute(folders[1]), options[:verbose], options[:yes])
+      copy(folders[0], make_absolute(folders[1]), options[:verbose], options[:confirm])
     end
   end
 

@@ -2,6 +2,10 @@
 
 An Android Directory Synchronizer
 
+## Build
+
+First run `bundle install` to install all dependencies.  Then you can build the gem using `bundle exec gem build`. Finally you can install the gem using `gem install --local adsync-1.0.0.gem`.
+
 ## Configuration
 
 To use AdSync, you need to have unlocked developer options, enabled USB debugging and trusted the computer where AdSync will run.
